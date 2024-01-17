@@ -103,7 +103,7 @@ const selectedGameIndex = parseInt(process.argv[4]);
 const gameData = readGameData(csvFilePath);
 
 if (action === 'get_game_list') {
-    console.log('List of Games:');
+    console.log('Supported Games:');
     gameData.forEach((game, index) => console.log(`${index} - ${game.gameName}`));
 } else if (action === 'clean_up_game') {
     findSteamGameFolder(selectedGameIndex, steamFolderPath, gameData);
