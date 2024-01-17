@@ -1,4 +1,5 @@
 @ECHO OFF
+:ENTER_STEAM_FOLDER
 SET /P steamFolder="Enter your Steam Common Folder path: "
 ECHO.
 
@@ -19,6 +20,7 @@ IF "%selectedGame%"=="exit" (
 REM Run Node.js script to clean up selected game
 CALL node "data\main.js" clean_up_game "%steamFolder%" "%selectedGame%"
 
-SET /P repeat="Do you want to clean up another game? (yes/no): "
+SET /P repeat="Do you want to clean up another game? (yes/no/change steam folder): "
 IF /I "%repeat%"=="yes" GOTO GAME_LIST
+IF /I "%repeat%"=="change steam folder" GOTO ENTER_STEAM_FOLDER
 ECHO Exiting...
