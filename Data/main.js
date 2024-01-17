@@ -103,14 +103,10 @@ const selectedGameIndex = parseInt(process.argv[4]);
 const gameData = readGameData(csvFilePath);
 
 if (action === 'get_game_list') {
-    console.log('Supported Games:');
+    console.log('List of Games:');
     gameData.forEach((game, index) => console.log(`${index} - ${game.gameName}`));
 } else if (action === 'clean_up_game') {
-    if (isNaN(selectedGameIndex) || selectedGameIndex < 0 || selectedGameIndex >= gameData.length) {
-        console.error('Invalid selectedGameIndex. Please provide a valid index.');
-    } else {
-        findSteamGameFolder(selectedGameIndex, steamFolderPath, gameData);
-    }
+    findSteamGameFolder(selectedGameIndex, steamFolderPath, gameData);
 } else {
     console.error('Invalid action. Usage: node your_script_name.js get_game_list <steamFolderPath>');
 }
