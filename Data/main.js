@@ -1,11 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-
 const csvFilePath = 'data/games_data.csv';
 
 function findSteamGameFolder(selectedGameIndex, gameFolderPath, gameData) {
-    if (!isValidGameIndex(selectedGameIndex, gameData)) {
-        return 'Invalid game index';
+    if (!(selectedGameIndex >= 0 && selectedGameIndex < gameData.length)) {
+        console.error('Invalid number entered. Please provide a valid number.');
+        return;
     }
 
     const { gameName, filesToRemove, removeAllThatStartsWith } = gameData[selectedGameIndex];
@@ -74,10 +74,6 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
     }
 }
 
-function isValidGameIndex(selectedGameIndex, gameData) {
-    return selectedGameIndex >= 0 && selectedGameIndex < gameData.length;
-}
-
 function readGameData(csvFilePath) {
     try {
         const fileContents = fs.readFileSync(csvFilePath, 'utf-8');
@@ -107,7 +103,7 @@ const selectedGameIndex = parseInt(process.argv[4]);
 const gameData = readGameData(csvFilePath);
 
 if (action === 'get_game_list') {
-    console.log('List of Games:');
+    console.log('Supported Games:');
     gameData.forEach((game, index) => console.log(`${index} - ${game.gameName}`));
 } else if (action === 'clean_up_game') {
     if (isNaN(selectedGameIndex) || selectedGameIndex < 0 || selectedGameIndex >= gameData.length) {
