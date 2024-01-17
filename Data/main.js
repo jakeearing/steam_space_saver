@@ -3,21 +3,18 @@ const path = require('path');
 
 const csvFilePath = 'data/games_data.csv';
 
-function findSteamGameFolder(selectedGameIndex, gameFolderPath) {
-    const gameData = readCsvFile(csvFilePath);
-
+function findSteamGameFolder(selectedGameIndex, gameFolderPath, gameData) {
     if (!isValidGameIndex(selectedGameIndex, gameData)) {
         return 'Invalid game index';
     }
 
-    const { folderName, filesToRemove, removeAllThatStartsWith } = gameData[selectedGameIndex];
-    const fullGameFolderPath = path.join(gameFolderPath, folderName);
+    const { gameName, filesToRemove, removeAllThatStartsWith } = gameData[selectedGameIndex];
+    const fullGameFolderPath = path.join(gameFolderPath, gameName);
 
     try {
         if (fs.existsSync(fullGameFolderPath)) {
             console.log('Game Folder Path:', fullGameFolderPath);
-            removeItemsAndDisplaySummary(fullGameFolderPath, filesToRemove);
-            removeAllFilesWithPrefix(fullGameFolderPath, removeAllThatStartsWith);
+            processGameCleanup(fullGameFolderPath, filesToRemove, removeAllThatStartsWith);
         } else {
             console.log('Game folder not found');
         }
@@ -27,17 +24,10 @@ function findSteamGameFolder(selectedGameIndex, gameFolderPath) {
     }
 }
 
-function removeItemsAndDisplaySummary(basePath, itemsToRemove) {
-    const removedItems = removeItems(basePath, itemsToRemove);
-    displayRemovedItemsSummary(removedItems);
-}
-
-function isValidGameIndex(selectedGameIndex, gameData) {
-    return selectedGameIndex >= 0 && selectedGameIndex < gameData.length;
-}
-
-function removeItems(basePath, itemsToRemove) {
+function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
     const removedItems = [];
+    let itemsRemoved = false;
+
     try {
         for (const item of itemsToRemove) {
             const fullPath = path.join(basePath, item);
@@ -53,64 +43,39 @@ function removeItems(basePath, itemsToRemove) {
                 removedItems.push(`File or folder not found: ${fullPath}`);
             }
         }
+
+        for (const folderAndPrefix of removeAllThatStartsWith) {
+            const [folder, prefix] = folderAndPrefix.split(' ');
+            const fullFolderPath = path.join(basePath, folder);
+            const files = fs.existsSync(fullFolderPath) && fs.statSync(fullFolderPath).isDirectory() ? fs.readdirSync(fullFolderPath) : [];
+
+            const removedItemsInFolder = removedItems.concat(
+                files
+                    .filter(file => file.toLowerCase().startsWith(prefix.toLowerCase()))
+                    .map(file => `Removed file: ${path.join(fullFolderPath, file)}`)
+            );
+
+            if (removedItemsInFolder.length > 0) {
+                itemsRemoved = true;
+                removedItems.push(...removedItemsInFolder);
+            }
+        }
+
+        console.log('Attempting to remove the following files/folders:');
+
+        if (removedItems.length > 0) {
+            removedItems.forEach(item => console.log(item));
+        } else {
+            console.log('No files/folders removed');
+        }
+
     } catch (error) {
         console.error('Error removing files/folders:', error.message);
     }
-    return removedItems;
 }
 
-function displayRemovedItemsSummary(removedItems) {
-    console.log('Attempting to remove the following files/folders:');
-
-    if (removedItems.length > 0) {
-        removedItems.forEach(item => console.log(item));
-    } else {
-        console.log('No files/folders removed');
-    }
-}
-
-function removeAllFilesWithPrefix(basePath, removeAllThatStartsWith) {
-    const removedItems = [];
-    let itemsRemoved = false;
-
-    for (const folderAndPrefix of removeAllThatStartsWith) {
-        const [folder, prefix] = folderAndPrefix.split('-');
-        const fullFolderPath = path.join(basePath, folder);
-        const files = fs.existsSync(fullFolderPath) && fs.statSync(fullFolderPath).isDirectory() ? fs.readdirSync(fullFolderPath) : [];
-
-        const removedItemsInFolder = removeItems(fullFolderPath, files.filter(file => file.toLowerCase().startsWith(prefix.toLowerCase())));
-
-        if (removedItemsInFolder.length > 0) {
-            itemsRemoved = true;
-            removedItems.push(...removedItemsInFolder);
-        }
-    }
-
-    if (itemsRemoved) {
-        displayRemovedItemsSummary(removedItems);
-    } else {
-        console.log('Files not found. No files/folders removed');
-    }
-}
-
-function readCsvFile(csvFilePath) {
-    const gameData = [];
-
-    try {
-        const fileContents = fs.readFileSync(csvFilePath, 'utf-8');
-        const rows = fileContents.trim().split('\n').slice(1);
-
-        for (const row of rows) {
-            const [_, folderName, filesToRemove, removeAllThatStartsWith] = row.split(',');
-            const fullPathsToRemove = filesToRemove.toLowerCase() === 'none' ? [] : filesToRemove.split(';').map(file => file.trim());
-            const fullPathsToRemoveStartsWith = removeAllThatStartsWith.toLowerCase() === 'none' ? [] : removeAllThatStartsWith.split(';').map(file => file.trim());
-            gameData.push({ folderName, filesToRemove: fullPathsToRemove, removeAllThatStartsWith: fullPathsToRemoveStartsWith });
-        }
-    } catch (error) {
-        console.error('Error reading CSV file:', error.message);
-    }
-
-    return gameData;
+function isValidGameIndex(selectedGameIndex, gameData) {
+    return selectedGameIndex >= 0 && selectedGameIndex < gameData.length;
 }
 
 function readGameData(csvFilePath) {
@@ -120,11 +85,11 @@ function readGameData(csvFilePath) {
 
         const gameData = [];
 
-        for (let index = 0; index < rows.length; index++) {
-            const [_, folderName, filesToRemove, removeAllThatStartsWith] = rows[index].split(',');
+        for (const row of rows) {
+            const [_, gameName, filesToRemove, removeAllThatStartsWith] = row.split(',');
             const fullPathsToRemove = filesToRemove.toLowerCase() === 'none' ? [] : filesToRemove.split(';').map(file => file.trim());
             const fullPathsToRemoveStartsWith = removeAllThatStartsWith.toLowerCase() === 'none' ? [] : removeAllThatStartsWith.split(';').map(file => file.trim());
-            gameData.push({ index, gameName: folderName, filesToRemove: fullPathsToRemove, removeAllThatStartsWith: fullPathsToRemoveStartsWith });
+            gameData.push({ gameName, filesToRemove: fullPathsToRemove, removeAllThatStartsWith: fullPathsToRemoveStartsWith });
         }
 
         return gameData;
@@ -139,13 +104,12 @@ const action = process.argv[2];
 const steamFolderPath = process.argv[3];
 const selectedGameIndex = parseInt(process.argv[4]);
 
-const gameData = readGameData(csvFilePath, action);
+const gameData = readGameData(csvFilePath);
 
 if (action === 'get_game_list') {
     console.log('List of Games:');
     gameData.forEach((game, index) => console.log(`${index} - ${game.gameName}`));
-}
-else if (action === 'clean_up_game') {
+} else if (action === 'clean_up_game') {
     if (isNaN(selectedGameIndex) || selectedGameIndex < 0 || selectedGameIndex >= gameData.length) {
         console.error('Invalid selectedGameIndex. Please provide a valid index.');
     } else {
