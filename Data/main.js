@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const csvFilePath = 'data/games_data.csv';
+const readlineSync = require('readline-sync');
 
 function findSteamGameFolder(selectedGameIndex, gameFolderPath, gameData) {
     if (!(selectedGameIndex >= 0 && selectedGameIndex < gameData.length)) {
@@ -29,19 +30,27 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
     let itemsRemoved = false;
 
     try {
-        for (const item of itemsToRemove) {
-            const fullPath = path.join(basePath, item);
-            if (fs.existsSync(fullPath)) {
-                if (fs.statSync(fullPath).isDirectory()) {
-                    fs.rm(fullPath, { recursive: true });
-                    removedItems.push(`Removed folder: ${fullPath}`);
+        const confirmationPrompt = `Remove the following files and folders? (yes/no)\n${itemsToRemove.join('\n')}\n`;
+        const confirmation = readlineSync.question(confirmationPrompt);
+
+        if (confirmation.toLowerCase() === 'yes') {
+            for (const item of itemsToRemove) {
+                const fullPath = path.join(basePath, item);
+                if (fs.existsSync(fullPath)) {
+                    if (fs.statSync(fullPath).isDirectory()) {
+                        fs.rm(fullPath, { recursive: true });
+                        removedItems.push(`Removed folder: ${fullPath}`);
+                    } else {
+                        fs.unlinkSync(fullPath);
+                        removedItems.push(`Removed file: ${fullPath}`);
+                    }
+                    itemsRemoved = true;
                 } else {
-                    fs.unlinkSync(fullPath);
-                    removedItems.push(`Removed file: ${fullPath}`);
+                    removedItems.push(`File or folder not found: ${fullPath}`);
                 }
-            } else {
-                removedItems.push(`File or folder not found: ${fullPath}`);
             }
+        } else {
+            console.log('Removal canceled by user.');
         }
 
         for (const folderAndPrefix of removeAllThatStartsWith) {
@@ -61,7 +70,7 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
             }
         }
 
-        console.log('Attempting to remove the following files/folders:');
+        console.log('The following files/folders will be removed:');
 
         if (removedItems.length > 0) {
             removedItems.forEach(item => console.log(item));
