@@ -14,7 +14,7 @@ function findSteamGameFolder(selectedGameIndex, gameFolderPath, gameData) {
 
     try {
         if (fs.existsSync(fullGameFolderPath)) {
-            console.log('Game Folder Path:', fullGameFolderPath);
+            console.log('Game Folder Path:\n', fullGameFolderPath, '\n');
             processGameCleanup(fullGameFolderPath, filesToRemove, removeAllThatStartsWith);
         } else {
             console.log('Game folder not found');
@@ -50,6 +50,7 @@ function getFolderSize(folderPath) {
             size += stat.size;
         }
     }
+    size += fs.statSync(folderPath).size;
 
     return size;
 }
@@ -80,17 +81,19 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
         }
 
         const totalSize = calculateTotalSize(removedItems);
-        const confirmationPrompt = `Remove the following files and folders? (yes/no)\n${removedItems.map(item => `${item.path} (${formatBytes(item.size)})`).join('\n')}\nTotal Size: ${formatBytes(totalSize)}\n`;
+        const confirmationPrompt = `${removedItems.map(item => `${item.path} (${formatBytes(item.size)})`).join('\n')}\n\nTotal Size: ${formatBytes(totalSize)}\n\nRemove the following files and folders? (yes/no)`;
         const confirmation = readlineSync.question(confirmationPrompt);
 
         if (confirmation.toLowerCase() === 'yes') {
             for (const item of removedItems) {
                 if (item.isDirectory) {
-                    fs.rm(item.path, { recursive: true });
-                    console.log(`Removed folder: ${item.path} (${formatBytes(item.size)})`);
+                    fs.promises.rm(item.path, { recursive: true })
+                        .then(() => console.log(`Removed folder: ${item.path} (${formatBytes(item.size)})`))
+                        .catch(error => console.error(`Error removing folder ${item.path}:`, error.message));
                 } else {
-                    fs.unlinkSync(item.path);
-                    console.log(`Removed file: ${item.path} (${formatBytes(item.size)})`);
+                    fs.promises.unlink(item.path)
+                        .then(() => console.log(`Removed file: ${item.path} (${formatBytes(item.size)})`))
+                        .catch(error => console.error(`Error removing file ${item.path}:`, error.message));
                 }
                 itemsRemoved = true;
             }
@@ -114,14 +117,6 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
                 itemsRemoved = true;
                 removedItems.push(...removedItemsInFolder);
             }
-        }
-
-        console.log('The following files/folders will be removed:');
-
-        if (removedItems.length > 0) {
-            removedItems.forEach(item => console.log(item));
-        } else {
-            console.log('No files/folders removed');
         }
 
     } catch (error) {

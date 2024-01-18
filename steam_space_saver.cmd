@@ -8,10 +8,11 @@ REM Run Node.js script to get game list
 FOR /F "tokens=*" %%i IN ('CALL node "data\main.js" get_game_list "%steamFolder%"') DO (
     ECHO %%i
 )
+ECHO.
 
 :SELECT_GAME
 SET /P selectedGame="Enter the number corresponding to the game you want to clean up (or 'exit' to close): "
-
+ECHO.
 IF "%selectedGame%"=="exit" (
     ECHO Exiting...
     EXIT /B 0
