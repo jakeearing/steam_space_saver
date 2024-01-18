@@ -25,30 +25,76 @@ function findSteamGameFolder(selectedGameIndex, gameFolderPath, gameData) {
     }
 }
 
+function formatBytes(bytes) {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    if (bytes === 0) return '0 Byte';
+    const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+    return Math.round(10 * (bytes / Math.pow(1024, i))) / 10 + ' ' + sizes[i];
+}
+
+function calculateTotalSize(items) {
+    return items.reduce((total, item) => total + (item.isDirectory ? (item.children ? calculateTotalSize(item.children) : 0) : item.size), 0);
+}
+
+function getFolderSize(folderPath) {
+    const files = fs.readdirSync(folderPath);
+    let size = 0;
+
+    for (const file of files) {
+        const filePath = path.join(folderPath, file);
+        const stat = fs.statSync(filePath);
+
+        if (stat.isDirectory()) {
+            size += getFolderSize(filePath);
+        } else {
+            size += stat.size;
+        }
+    }
+
+    return size;
+}
+
 function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
     const removedItems = [];
     let itemsRemoved = false;
 
     try {
-        const confirmationPrompt = `Remove the following files and folders? (yes/no)\n${itemsToRemove.join('\n')}\n`;
+        let totalBytesFreed = 0;
+
+        for (const item of itemsToRemove) {
+            const fullPath = path.join(basePath, item);
+            if (fs.existsSync(fullPath)) {
+                const isDirectory = fs.statSync(fullPath).isDirectory();
+
+                const size = isDirectory ? getFolderSize(fullPath) : fs.statSync(fullPath).size;
+                totalBytesFreed += size;
+
+                removedItems.push({
+                    path: fullPath,
+                    isDirectory,
+                    size
+                });
+            } else {
+                removedItems.push({ path: fullPath, notFound: true });
+            }
+        }
+
+        const totalSize = calculateTotalSize(removedItems);
+        const confirmationPrompt = `Remove the following files and folders? (yes/no)\n${removedItems.map(item => `${item.path} (${formatBytes(item.size)})`).join('\n')}\nTotal Size: ${formatBytes(totalSize)}\n`;
         const confirmation = readlineSync.question(confirmationPrompt);
 
         if (confirmation.toLowerCase() === 'yes') {
-            for (const item of itemsToRemove) {
-                const fullPath = path.join(basePath, item);
-                if (fs.existsSync(fullPath)) {
-                    if (fs.statSync(fullPath).isDirectory()) {
-                        fs.rm(fullPath, { recursive: true });
-                        removedItems.push(`Removed folder: ${fullPath}`);
-                    } else {
-                        fs.unlinkSync(fullPath);
-                        removedItems.push(`Removed file: ${fullPath}`);
-                    }
-                    itemsRemoved = true;
+            for (const item of removedItems) {
+                if (item.isDirectory) {
+                    fs.rm(item.path, { recursive: true });
+                    console.log(`Removed folder: ${item.path} (${formatBytes(item.size)})`);
                 } else {
-                    removedItems.push(`File or folder not found: ${fullPath}`);
+                    fs.unlinkSync(item.path);
+                    console.log(`Removed file: ${item.path} (${formatBytes(item.size)})`);
                 }
+                itemsRemoved = true;
             }
+            console.log(`Total space freed: ${formatBytes(totalBytesFreed)}`);
         } else {
             console.log('Removal canceled by user.');
         }
