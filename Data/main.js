@@ -1,4 +1,5 @@
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const csvFilePath = 'data/games_data.csv';
 const readlineSync = require('readline-sync');
@@ -55,7 +56,24 @@ function getFolderSize(folderPath) {
     return size;
 }
 
-function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
+async function removeFolderRecursive(folderPath) {
+    const files = await fsPromises.readdir(folderPath);
+
+    for (const file of files) {
+        const filePath = path.join(folderPath, file);
+        const stat = await fsPromises.stat(filePath);
+
+        if (stat.isDirectory()) {
+            await removeFolderRecursive(filePath);
+        } else {
+            await fsPromises.unlink(filePath);
+        }
+    }
+
+    await fsPromises.rmdir(folderPath);
+}
+
+async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
     const removedItems = [];
     let itemsRemoved = false;
 
@@ -67,7 +85,7 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
             if (fs.existsSync(fullPath)) {
                 const isDirectory = fs.statSync(fullPath).isDirectory();
 
-                const size = isDirectory ? getFolderSize(fullPath) : fs.statSync(fullPath).size;
+                const size = isDirectory ? await getFolderSize(fullPath) : fs.statSync(fullPath).size;
                 totalBytesFreed += size;
 
                 removedItems.push({
@@ -75,6 +93,12 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
                     isDirectory,
                     size
                 });
+
+                if (isDirectory) {
+                    await removeFolderRecursive(fullPath);
+                } else {
+                    await fsPromises.unlink(fullPath);
+                }
             } else {
                 removedItems.push({ path: fullPath, notFound: true });
             }
@@ -87,13 +111,9 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
         if (confirmation.toLowerCase() === 'yes') {
             for (const item of removedItems) {
                 if (item.isDirectory) {
-                    fs.promises.rm(item.path, { recursive: true })
-                        .then(() => console.log(`Removed folder: ${item.path} (${formatBytes(item.size)})`))
-                        .catch(error => console.error(`Error removing folder ${item.path}:`, error.message));
+                    console.log(`Removed folder: ${item.path} (${formatBytes(item.size)})`);
                 } else {
-                    fs.promises.unlink(item.path)
-                        .then(() => console.log(`Removed file: ${item.path} (${formatBytes(item.size)})`))
-                        .catch(error => console.error(`Error removing file ${item.path}:`, error.message));
+                    console.log(`Removed file: ${item.path} (${formatBytes(item.size)})`);
                 }
                 itemsRemoved = true;
             }
@@ -101,24 +121,6 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
         } else {
             console.log('Removal canceled by user.');
         }
-
-        for (const folderAndPrefix of removeAllThatStartsWith) {
-            const [folder, prefix] = folderAndPrefix.split('/');
-            const fullFolderPath = path.join(basePath, folder);
-            const files = fs.existsSync(fullFolderPath) && fs.statSync(fullFolderPath).isDirectory() ? fs.readdirSync(fullFolderPath) : [];
-
-            const removedItemsInFolder = removedItems.concat(
-                files
-                    .filter(file => file.toLowerCase().startsWith(prefix.toLowerCase()))
-                    .map(file => `Removed file: ${path.join(fullFolderPath, file)}`)
-            );
-
-            if (removedItemsInFolder.length > 0) {
-                itemsRemoved = true;
-                removedItems.push(...removedItemsInFolder);
-            }
-        }
-
     } catch (error) {
         console.error('Error removing files/folders:', error.message);
     }
@@ -145,18 +147,27 @@ function readGameData(csvFilePath) {
     }
 }
 
-// Process command line arguments
-const action = process.argv[2];
-const steamFolderPath = process.argv[3];
-const selectedGameIndex = parseInt(process.argv[4]);
+async function runCleanup() {
+    try {
+        // Process command line arguments
+        const action = process.argv[2];
+        const steamFolderPath = process.argv[3];
+        const selectedGameIndex = parseInt(process.argv[4]);
 
-const gameData = readGameData(csvFilePath);
+        const gameData = readGameData(csvFilePath);
 
-if (action === 'get_game_list') {
-    console.log('Supported Games:');
-    gameData.forEach((game, index) => console.log(`${index} - ${game.gameName}`));
-} else if (action === 'clean_up_game') {
-    findSteamGameFolder(selectedGameIndex, steamFolderPath, gameData);
-} else {
-    console.error('Invalid action. Usage: node your_script_name.js get_game_list <steamFolderPath>');
+        if (action === 'get_game_list') {
+            console.log('Supported Games:');
+            gameData.forEach((game, index) => console.log(`${index} - ${game.gameName}`));
+        } else if (action === 'clean_up_game') {
+            await findSteamGameFolder(selectedGameIndex, steamFolderPath, gameData);
+        } else {
+            console.error('Invalid action. Usage: node your_script_name.js get_game_list <steamFolderPath>');
+        }
+    } catch (error) {
+        console.error('Error:', error.message);
+    }
 }
+
+// Call the async function
+runCleanup();
