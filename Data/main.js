@@ -4,19 +4,19 @@ const path = require('path');
 const csvFilePath = 'data/games_data.csv';
 const readlineSync = require('readline-sync');
 
-function findSteamGameFolder(selectedGameIndex, gameFolderPath, gameData) {
+async function findSteamGameFolder(selectedGameIndex, gameFolderPath, gameData) {
     if (!(selectedGameIndex >= 0 && selectedGameIndex < gameData.length)) {
         console.error('Invalid number entered. Please provide a valid number.');
         return;
     }
 
-    const { gameName, filesToRemove, removeAllThatStartsWith } = gameData[selectedGameIndex];
+    const { gameName, filesToRemove, removeAllThatStartsWith, removeRange } = gameData[selectedGameIndex];
     const fullGameFolderPath = path.join(gameFolderPath, gameName);
 
     try {
-        if (fs.existsSync(fullGameFolderPath)) {
+        if (await fsPromises.access(fullGameFolderPath).then(() => true).catch(() => false)) {
             console.log('Game Folder Path:\n', fullGameFolderPath, '\n');
-            processGameCleanup(fullGameFolderPath, filesToRemove, removeAllThatStartsWith);
+            await processGameCleanup(fullGameFolderPath, filesToRemove, removeAllThatStartsWith, removeRange);
         } else {
             console.log('Game folder not found');
         }
@@ -82,18 +82,26 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
 
         // Remove specified files/folders
         for (const item of itemsToRemove) {
-            const fullPath = path.join(basePath, item);
+            const cleanedItem = item.replace(/'/g, '');
+            const fullPath = path.join(basePath, cleanedItem);
+
             if (await fsPromises.access(fullPath).then(() => true).catch(() => false)) {
                 const isDirectory = (await fsPromises.stat(fullPath)).isDirectory();
 
-                const size = isDirectory ? await getFolderSize(fullPath) : (await fsPromises.stat(fullPath)).size;
-                totalBytesFreed += size;
+                if (isDirectory) {
+                    // If it's a directory, remove the entire folder
+                    await removeFolderRecursive(fullPath);
+                } else {
+                    // If it's a file, remove the file
+                    const size = (await fsPromises.stat(fullPath)).size;
+                    totalBytesFreed += size;
 
-                removedItems.push({
-                    path: fullPath,
-                    isDirectory,
-                    size
-                });
+                    removedItems.push({
+                        path: fullPath,
+                        isDirectory,
+                        size: isDirectory ? await getFolderSize(fullPath) : size
+                    });
+                }
             } else {
                 removedItems.push({ path: fullPath, notFound: true });
             }
@@ -101,33 +109,45 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
 
         // Remove files within a specified range
         if (removeRange) {
-            const [start, end] = removeRange.split('|').map(Number);
+            const [start, end] = removeRange.split('-').map(Number);
             const filesInRange = await fsPromises.readdir(basePath);
 
             for (const fileInRange of filesInRange) {
-                const fullPath = path.join(basePath, fileInRange);
-                const isDirectory = (await fsPromises.stat(fullPath)).isDirectory();
+                const fileNumberMatch = fileInRange.match(/\|(\d+)/);
+                if (fileNumberMatch) {
+                    const fileNumber = parseInt(fileNumberMatch[1]);
 
-                const size = isDirectory ? await getFolderSize(fullPath) : (await fsPromises.stat(fullPath)).size;
-                totalBytesFreed += size;
+                    if (!isNaN(fileNumber) && fileNumber >= start && fileNumber <= end) {
+                        const fullPath = path.join(basePath, fileInRange);
+                        const isDirectory = (await fsPromises.stat(fullPath)).isDirectory();
 
-                removedItems.push({
-                    path: fullPath,
-                    isDirectory,
-                    size
-                });
+                        const size = isDirectory ? await getFolderSize(fullPath) : (await fsPromises.stat(fullPath)).size;
+                        totalBytesFreed += size;
+
+                        removedItems.push({
+                            path: fullPath,
+                            isDirectory,
+                            size
+                        });
+                    }
+                }
             }
         }
 
         // Remove files based on the beginning of the file name
         for (const folderAndPrefix of removeAllThatStartsWith) {
-            const [folder, prefix] = folderAndPrefix.split('|');
-            const fullFolderPath = path.join(basePath, folder);
+            const [folder, prefix] = folderAndPrefix.split('/');
+            const cleanedFolder = folder.replace(/'/g, '');
+            const cleanedPrefix = prefix.replace(/'/g, '');
+            const fullFolderPath = path.join(basePath, cleanedFolder);
+
             const files = await fsPromises.readdir(fullFolderPath);
 
             const removedItemsInFolder = await Promise.all(files.map(async (file) => {
-                if (file.toLowerCase().startsWith(prefix.toLowerCase())) {
-                    const fullPath = path.join(fullFolderPath, file);
+                const fullPath = path.join(fullFolderPath, file);
+
+                if (file.toLowerCase().startsWith(cleanedPrefix.toLowerCase())) {
+
                     const stat = await fsPromises.stat(fullPath);
                     const isDirectory = stat.isDirectory();
                     const size = isDirectory ? await getFolderSize(fullPath) : stat.size;
@@ -146,6 +166,7 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
 
             removedItems.push(...removedItemsInFolder.filter(item => item !== null));
         }
+
 
         const totalSize = calculateTotalSize(removedItems);
         const confirmationPrompt = `${removedItems.map(item => `${item.path} (${formatBytes(item.size)})`).join('\n')}\n\nTotal Size: ${formatBytes(totalSize)}\n\nRemove the above files and folders? (yes/no)`;
@@ -180,10 +201,10 @@ function readGameData(csvFilePath) {
         const gameData = [];
 
         for (const row of rows) {
-            const [_, gameName, filesToRemove, removeAllThatStartsWith] = row.split(',');
+            const [_, gameName, filesToRemove, removeAllThatStartsWith, removeRange] = row.split(',');
             const fullPathsToRemove = filesToRemove.toLowerCase() === 'none' ? [] : filesToRemove.split(';').map(file => file.trim());
             const fullPathsToRemoveStartsWith = removeAllThatStartsWith.toLowerCase() === 'none' ? [] : removeAllThatStartsWith.split(';').map(file => file.trim());
-            gameData.push({ gameName, filesToRemove: fullPathsToRemove, removeAllThatStartsWith: fullPathsToRemoveStartsWith });
+            gameData.push({ gameName, filesToRemove: fullPathsToRemove, removeAllThatStartsWith: fullPathsToRemoveStartsWith, removeRange });
         }
 
         return gameData;
