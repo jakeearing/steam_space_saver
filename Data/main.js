@@ -109,27 +109,43 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
 
         // Remove files within a specified range
         if (removeRange) {
-            const [start, end] = removeRange.split('-').map(Number);
-            const filesInRange = await fsPromises.readdir(basePath);
+            const [folder, range] = removeRange.replace(/'/g, '').split('>');
+            const [start, end] = range.split('-').map(range => range.trim());
+            const fullFolderPath = path.join(basePath, folder);
+
+            console.log(`Looking for files in range: ${start} to ${end} in folder: ${fullFolderPath}`);
+
+            const isInRange = (fileName) => {
+                const lowerCaseFileName = fileName.toLowerCase();
+                const lowerCaseStart = start.toLowerCase();
+                const lowerCaseEnd = end.toLowerCase();
+
+                console.log(`Checking file: ${fileName}`);
+
+                return lowerCaseFileName.includes(lowerCaseStart) && lowerCaseFileName.includes(lowerCaseEnd);
+            };
+
+            const filesInRange = await fsPromises.readdir(fullFolderPath);
 
             for (const fileInRange of filesInRange) {
-                const fileNumberMatch = fileInRange.match(/\|(\d+)/);
-                if (fileNumberMatch) {
-                    const fileNumber = parseInt(fileNumberMatch[1]);
-
-                    if (!isNaN(fileNumber) && fileNumber >= start && fileNumber <= end) {
-                        const fullPath = path.join(basePath, fileInRange);
-                        const isDirectory = (await fsPromises.stat(fullPath)).isDirectory();
-
-                        const size = isDirectory ? await getFolderSize(fullPath) : (await fsPromises.stat(fullPath)).size;
-                        totalBytesFreed += size;
-
-                        removedItems.push({
-                            path: fullPath,
-                            isDirectory,
-                            size
-                        });
-                    }
+                const fullPath = path.join(fullFolderPath, fileInRange);
+            
+                console.log(`Checking file: ${fileInRange}`);
+            
+                if (isInRange(fileInRange)) {
+                    console.log(`File ${fileInRange} is within the specified range.`);
+                    const isDirectory = (await fsPromises.stat(fullPath)).isDirectory();
+                    const size = isDirectory ? await getFolderSize(fullPath) : (await fsPromises.stat(fullPath)).size;
+            
+                    totalBytesFreed += size;
+            
+                    removedItems.push({
+                        path: fullPath,
+                        isDirectory,
+                        size
+                    });
+                } else {
+                    console.log(`File ${fileInRange} is NOT within the specified range.`);
                 }
             }
         }
