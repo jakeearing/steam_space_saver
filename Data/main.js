@@ -107,49 +107,6 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
             }
         }
 
-        // Remove files within a specified range
-        if (removeRange) {
-            const [folder, range] = removeRange.replace(/'/g, '').split('>');
-            const [start, end] = range.split('-').map(range => range.trim());
-            const fullFolderPath = path.join(basePath, folder);
-
-            console.log(`Looking for files in range: ${start} to ${end} in folder: ${fullFolderPath}`);
-
-            const isInRange = (fileName) => {
-                const lowerCaseFileName = fileName.toLowerCase();
-                const lowerCaseStart = start.toLowerCase();
-                const lowerCaseEnd = end.toLowerCase();
-
-                console.log(`Checking file: ${fileName}`);
-
-                return lowerCaseFileName.includes(lowerCaseStart) && lowerCaseFileName.includes(lowerCaseEnd);
-            };
-
-            const filesInRange = await fsPromises.readdir(fullFolderPath);
-
-            for (const fileInRange of filesInRange) {
-                const fullPath = path.join(fullFolderPath, fileInRange);
-            
-                console.log(`Checking file: ${fileInRange}`);
-            
-                if (isInRange(fileInRange)) {
-                    console.log(`File ${fileInRange} is within the specified range.`);
-                    const isDirectory = (await fsPromises.stat(fullPath)).isDirectory();
-                    const size = isDirectory ? await getFolderSize(fullPath) : (await fsPromises.stat(fullPath)).size;
-            
-                    totalBytesFreed += size;
-            
-                    removedItems.push({
-                        path: fullPath,
-                        isDirectory,
-                        size
-                    });
-                } else {
-                    console.log(`File ${fileInRange} is NOT within the specified range.`);
-                }
-            }
-        }
-
         // Remove files based on the beginning of the file name
         for (const folderAndPrefix of removeAllThatStartsWith) {
             const [folder, prefix] = folderAndPrefix.split('/');
@@ -182,7 +139,6 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
 
             removedItems.push(...removedItemsInFolder.filter(item => item !== null));
         }
-
 
         const totalSize = calculateTotalSize(removedItems);
         const confirmationPrompt = `${removedItems.map(item => `${item.path} (${formatBytes(item.size)})`).join('\n')}\n\nTotal Size: ${formatBytes(totalSize)}\n\nRemove the above files and folders? (yes/no)`;
