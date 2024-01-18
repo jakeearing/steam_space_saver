@@ -33,7 +33,7 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
             const fullPath = path.join(basePath, item);
             if (fs.existsSync(fullPath)) {
                 if (fs.statSync(fullPath).isDirectory()) {
-                    fs.rmdirSync(fullPath, { recursive: true });
+                    fs.rm(fullPath, { recursive: true });
                     removedItems.push(`Removed folder: ${fullPath}`);
                 } else {
                     fs.unlinkSync(fullPath);
@@ -45,7 +45,7 @@ function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
         }
 
         for (const folderAndPrefix of removeAllThatStartsWith) {
-            const [folder, prefix] = folderAndPrefix.split(' ');
+            const [folder, prefix] = folderAndPrefix.split('/');
             const fullFolderPath = path.join(basePath, folder);
             const files = fs.existsSync(fullFolderPath) && fs.statSync(fullFolderPath).isDirectory() ? fs.readdirSync(fullFolderPath) : [];
 
