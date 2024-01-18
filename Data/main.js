@@ -73,13 +73,14 @@ async function removeFolderRecursive(folderPath) {
     await fsPromises.rmdir(folderPath);
 }
 
-async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith) {
+async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWith, removeRange) {
     const removedItems = [];
     let itemsRemoved = false;
 
     try {
         let totalBytesFreed = 0;
 
+        // Remove specified files/folders
         for (const item of itemsToRemove) {
             const fullPath = path.join(basePath, item);
             if (fs.existsSync(fullPath)) {
@@ -101,6 +102,36 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
                 }
             } else {
                 removedItems.push({ path: fullPath, notFound: true });
+            }
+        }
+
+        // Remove files within a specified range
+        if (removeRange) {
+            const [start, end] = removeRange.split('-').map(Number);
+            const filesInRange = fs.readdirSync(basePath)
+                .filter(file => {
+                    const fileNumber = parseInt(file.split('-')[1]);
+                    return !isNaN(fileNumber) && fileNumber >= start && fileNumber <= end;
+                });
+
+            for (const fileInRange of filesInRange) {
+                const fullPath = path.join(basePath, fileInRange);
+                const isDirectory = fs.statSync(fullPath).isDirectory();
+
+                const size = isDirectory ? await getFolderSize(fullPath) : fs.statSync(fullPath).size;
+                totalBytesFreed += size;
+
+                removedItems.push({
+                    path: fullPath,
+                    isDirectory,
+                    size
+                });
+
+                if (isDirectory) {
+                    await removeFolderRecursive(fullPath);
+                } else {
+                    await fsPromises.unlink(fullPath);
+                }
             }
         }
 
