@@ -107,10 +107,10 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
 
         // Remove files within a specified range
         if (removeRange) {
-            const [start, end] = removeRange.split('-').map(Number);
+            const [start, end] = removeRange.split('|').map(Number);
             const filesInRange = fs.readdirSync(basePath)
                 .filter(file => {
-                    const fileNumber = parseInt(file.split('-')[1]);
+                    const fileNumber = parseInt(file.split('|')[1]);
                     return !isNaN(fileNumber) && fileNumber >= start && fileNumber <= end;
                 });
 
