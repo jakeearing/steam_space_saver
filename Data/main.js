@@ -126,21 +126,25 @@ async function processGameCleanup(basePath, itemsToRemove, removeAllThatStartsWi
             const files = await fsPromises.readdir(fullFolderPath);
 
             const removedItemsInFolder = await Promise.all(files.map(async (file) => {
-                const fullPath = path.join(fullFolderPath, file);
-                const stat = await fsPromises.stat(fullPath);
-                const isDirectory = stat.isDirectory();
-                const size = isDirectory ? await getFolderSize(fullPath) : stat.size;
+                if (file.toLowerCase().startsWith(prefix.toLowerCase())) {
+                    const fullPath = path.join(fullFolderPath, file);
+                    const stat = await fsPromises.stat(fullPath);
+                    const isDirectory = stat.isDirectory();
+                    const size = isDirectory ? await getFolderSize(fullPath) : stat.size;
 
-                totalBytesFreed += size;
+                    totalBytesFreed += size;
 
-                return {
-                    path: fullPath,
-                    isDirectory,
-                    size
-                };
+                    return {
+                        path: fullPath,
+                        isDirectory,
+                        size
+                    };
+                } else {
+                    return null;
+                }
             }));
 
-            removedItems.push(...removedItemsInFolder);
+            removedItems.push(...removedItemsInFolder.filter(item => item !== null));
         }
 
         const totalSize = calculateTotalSize(removedItems);
